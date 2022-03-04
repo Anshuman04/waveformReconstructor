@@ -398,22 +398,31 @@ class PatchExpand(nn.Module):
         super().__init__()
         self.input_resolution = input_resolution
         self.dim = dim
-        self.expand = nn.Linear(dim, 2*dim, bias=False) if dim_scale==2 else nn.Identity()
+        # Ansh modify starts
+        # self.expand = nn.Linear(dim, 2*dim, bias=False) if dim_scale==2 else nn.Identity()
+        self.expand = nn.Linear(dim, dim, bias=False) if dim_scale==2 else nn.Identity()
+        # Ansh modify ends
         self.norm = norm_layer(dim // dim_scale)
 
     def forward(self, x):
         """
         x: B, H*W, C
         """
-        print("HIT")
+        # print("HIT")
+        # import pdb
+        # pdb.set_trace()
         H, W = self.input_resolution
         x = self.expand(x)
         B, L, C = x.shape
         assert L == H * W, "input feature has wrong size: patch expand: {}={}x{}".format(L, H, W)
 
         x = x.view(B, H, W, C)
-        x = rearrange(x, 'b h w (p1 p2 c)-> b (h p1) (w p2) c', p1=2, p2=2, c=C//4)
-        x = x.view(B,-1,C//4)
+        # Ansh modify starts
+        # x = rearrange(x, 'b h w (p1 p2 c)-> b (h p1) (w p2) c', p1=2, p2=2, c=C//4)
+        # x = x.view(B,-1,C//4)
+        x = rearrange(x, 'b h w (p1 p2 c)-> b (h p1) (w p2) c', p1=1, p2=2, c=C//2)
+        x = x.view(B,-1,C//2)
+        # Ansh modify ends
         x= self.norm(x)
 
         return x
@@ -424,7 +433,10 @@ class FinalPatchExpand_X4(nn.Module):
         self.input_resolution = input_resolution
         self.dim = dim
         self.dim_scale = dim_scale
-        self.expand = nn.Linear(dim, 16*dim, bias=False)
+        # Ansh modify starts
+        # self.expand = nn.Linear(dim, 16*dim, bias=False)
+        self.expand = nn.Linear(dim, 15*dim, bias=False)
+        # Ansh modify ends
         self.output_dim = dim
         self.norm = norm_layer(self.output_dim)
 
@@ -432,13 +444,19 @@ class FinalPatchExpand_X4(nn.Module):
         """
         x: B, H*W, C
         """
+        # import pdb
+        # pdb.set_trace()
         H, W = self.input_resolution
         x = self.expand(x)
         B, L, C = x.shape
         assert L == H * W, "input feature has wrong size: Final patch expand"
 
         x = x.view(B, H, W, C)
+        # Ansh modify starts reverted
         x = rearrange(x, 'b h w (p1 p2 c)-> b (h p1) (w p2) c', p1=self.dim_scale, p2=self.dim_scale, c=C//(self.dim_scale**2))
+        # x = rearrange(x, 'b h w (p1 p2 c)-> b (h p1) (w p2) c', p1=1, p2=15, c=C//15)
+        # Ansh modify ends reverted
+
         x = x.view(B,-1,self.output_dim)
         x= self.norm(x)
 
@@ -475,7 +493,7 @@ class BasicLayer(nn.Module):
         self.use_checkpoint = use_checkpoint
 
         # build blocks
-        print("BL 1 WS: {}".format(window_size))
+        # print("BL 1 WS: {}".format(window_size))
         # import pdb
         # pdb.set_trace()
         self.blocks = nn.ModuleList([
@@ -497,7 +515,7 @@ class BasicLayer(nn.Module):
 
     def forward(self, x):
         for blkNo in range(len(self.blocks)):
-            print("Executing BL internal block no.: {}".format(blkNo))
+            # print("Executing BL internal block no.: {}".format(blkNo))
             if self.use_checkpoint:
                 x = checkpoint.checkpoint(self.blocks[blkNo], x)
             else:
@@ -594,7 +612,7 @@ class PatchEmbed(nn.Module):
         # patches_resolution = [img_size[0] // patch_size[0], img_size[1] // patch_size[1]]
         img_size = (1, img_size)
         patch_size = (1, patch_size)
-        patches_resolution = [1, 450]
+        patches_resolution = [1, 480]
         # # Ansh Modify ends
 
         self.img_size = img_size
@@ -657,7 +675,7 @@ class Encode_Decode_Integrator(nn.Module):
         use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False
     """
 
-    def __init__(self, img_size=7200, patch_size=16, in_chans=1, num_classes=1000,
+    def __init__(self, img_size=7200, patch_size=15, in_chans=1, num_classes=1000,
                  embed_dim=96, depths=[2, 2, 2, 2], depths_decoder=[1, 2, 2, 2], num_heads=[3, 6, 12, 24],
                  window_size=8, mlp_ratio=4., qkv_bias=True, qk_scale=None,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
@@ -669,7 +687,7 @@ class Encode_Decode_Integrator(nn.Module):
 
         print("SwinTransformerSys expand initial----depths:{};depths_decoder:{};drop_path_rate:{};num_classes:{}".format(depths,
                                                                                                                          depths_decoder,drop_path_rate,num_classes))
-        print("EDI 1 WS: {}".format(window_size))
+        # print("EDI 1 WS: {}".format(window_size))
         self.num_classes = num_classes
         self.num_layers = len(depths)
         self.embed_dim = embed_dim
@@ -679,6 +697,7 @@ class Encode_Decode_Integrator(nn.Module):
         self.num_features_up = int(embed_dim * 2)
         self.mlp_ratio = mlp_ratio
         self.final_upsample = final_upsample
+        self.img_size = img_size
 
         # split image into non-overlapping patches
         self.patch_embed = PatchEmbed(
@@ -700,7 +719,7 @@ class Encode_Decode_Integrator(nn.Module):
 
         # build encoder and bottleneck layers
         self.layers = nn.ModuleList()
-        print("EDI 2 WS: {}".format(window_size))
+        # print("EDI 2 WS: {}".format(window_size))
         for i_layer in range(self.num_layers):
             layer = BasicLayer(dim=int(embed_dim * 2 ** i_layer),
                                # # Ansh Modify starts
@@ -727,6 +746,8 @@ class Encode_Decode_Integrator(nn.Module):
             concat_linear = nn.Linear(2*int(embed_dim*2**(self.num_layers-1-i_layer)),
                                       int(embed_dim*2**(self.num_layers-1-i_layer))) if i_layer > 0 else nn.Identity()
             if i_layer == 0:
+                # import pdb
+                # pdb.set_trace()
                 # # Ansh Modify starts
                 # layer_up = PatchExpand(input_resolution=(patches_resolution[0] // (2 ** (self.num_layers-1-i_layer)),
                 #                                          patches_resolution[1] // (2 ** (self.num_layers-1-i_layer))), dim=int(embed_dim * 2 ** (self.num_layers-1-i_layer)), dim_scale=2, norm_layer=norm_layer)
@@ -762,9 +783,11 @@ class Encode_Decode_Integrator(nn.Module):
             print("---final upsample expand_first---")
             # #Ansh Modify Begins
             # self.up = FinalPatchExpand_X4(input_resolution=(img_size//patch_size,img_size//patch_size),dim_scale=4,dim=embed_dim)
+            # self.output = nn.Conv2d(in_channels=embed_dim,out_channels=self.num_classes,kernel_size=1,bias=False)
             self.up = FinalPatchExpand_X4(input_resolution=(1 ,img_size//patch_size),dim_scale=4,dim=embed_dim)
+
+            self.output = nn.Linear(embed_dim, 1)
             # # Ansh Modify Ends
-            self.output = nn.Conv2d(in_channels=embed_dim,out_channels=self.num_classes,kernel_size=1,bias=False)
 
         self.apply(self._init_weights)
 
@@ -794,8 +817,18 @@ class Encode_Decode_Integrator(nn.Module):
         x_downsample = []
 
         for layerNo in range(len(self.layers)):
-            print("Executing EDI Layer: {}".format(layerNo))
+            # print("Executing EDI Layer: {}".format(layerNo))
+            # Ansh Modify starts REVERTED
             x_downsample.append(x)
+            # B,W,C = x.shape
+            # if W % 2 != 0:
+            #     import pdb
+            #     pdb.set_trace()
+            #     tempVec = x[:, :-1, :]
+            #     x_downsample.append(tempVec)
+            # else:
+            #     x_downsample.append(x)
+            # Ansh modify ends REVERTED
             x = self.layers[layerNo](x)
 
         x = self.norm(x)  # B L C
@@ -805,12 +838,19 @@ class Encode_Decode_Integrator(nn.Module):
     #Dencoder and Skip connection
     def forward_up_features(self, x, x_downsample):
         for inx, layer_up in enumerate(self.layers_up):
+            # print ("UUUUUUUPPPPPPPP: {}".format(inx))
             if inx == 0:
                 x = layer_up(x)
             else:
-                import pdb
-                pdb.set_trace()
-                x = torch.cat([x,x_downsample[3-inx]],-1)
+                # import pdb
+                # pdb.set_trace()
+                # Ansh Modify starts
+                # x = torch.cat([x,x_downsample[3-inx]],-1)
+                refVec = x_downsample[3-inx]
+                if refVec[0, :, 0].shape != x[0, :, 0].shape:
+                    refVec = refVec[:, :-1,:]
+                x = torch.cat([x,refVec],-1)
+                # Ansh modify ends
                 x = self.concat_back_dim[inx](x)
                 x = layer_up(x)
 
@@ -824,19 +864,27 @@ class Encode_Decode_Integrator(nn.Module):
         assert L == H*W, "input features has wrong size"
 
         if self.final_upsample=="expand_first":
+            # import pdb
+            # pdb.set_trace()
             x = self.up(x)
-            x = x.view(B,4*H,4*W,-1)
-            x = x.permute(0,3,1,2) #B,C,H,W
+            # Ansh modify starts
+            # x = x.view(B,4*H,4*W,-1)
+            # x = x.permute(0,3,1,2) #B,C,H,W
+            # x = self.output(x)
             x = self.output(x)
+            x = x.view(B, self.img_size)
+            # Ansh modify ends
 
         return x
 
     def forward(self, x):
-        print ("IN integrated E-D")
+        # print ("IN integrated E-D")
         # import pdb
         # pdb.set_trace()
         x, x_downsample = self.forward_features(x)
-        print ("=" * 50)
+        # print ("=" * 50)
+        # import pdb
+        # pdb.set_trace()
         x = self.forward_up_features(x,x_downsample)
         x = self.up_x4(x)
 
@@ -879,7 +927,7 @@ class WaveformReconstructor(nn.Module):
                                                  use_checkpoint=config.TRAIN.USE_CHECKPOINT)
 
     def forward(self, x):
-        print ("IN waveform reconstructor")
+        # print ("IN waveform reconstructor")
         # #Ansh Modify begins
         # if x.size()[1] == 1:
         #     x = x.repeat(1,3,1,1)
