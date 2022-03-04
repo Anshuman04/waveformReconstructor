@@ -40,7 +40,7 @@ class SeismicDataset(Dataset):
         copyData[gapStartIdx: gapEndIdx] = 0
         sampleDict["gapStartIdx"] = gapStartIdx
         sampleDict["gapEndIdx"] = gapEndIdx
-        sampleDict["cutValues"] = cutData
+        sampleDict["original"] = dat
         sampleDict["sample"] = copyData
         return sampleDict
 
