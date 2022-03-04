@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import logging
 import argparse
 
@@ -7,7 +8,7 @@ from tqdm import tqdm
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
-from torch.nn.modules.loss import CrossEntropyLoss
+from torch.nn.modules.loss import CrossEntropyLoss, MSELoss
 
 from customDataset import SeismicDataset
 from defaultConfig import get_config
@@ -109,22 +110,33 @@ if __name__ == "__main__":
 
     # Training
     model.train()
-    ce_loss = CrossEntropyLoss()
+    mse_loss = MSELoss()
+    base_lr = allArgs.base_lr
     # dice_loss = DiceLoss(num_classes)
-    optimizer = optim.SGD(model.parameters(), lr=allArgs.base_lr, momentum=0.9, weight_decay=0.0001)
+    optimizer = optim.SGD(model.parameters(), lr=base_lr, momentum=0.9, weight_decay=0.0001)
     # writer = SummaryWriter(snapshot_path + '/log')
     iter_num = 0
     max_epoch = allArgs.max_epochs
     max_iterations = allArgs.max_epochs * len(trainGenerator)
     # iterator = tqdm(range(max_epoch), ncols=70)
     for epochNum in range(max_epoch):
+        eStart = time.time()
         for batchIdx, batchData in enumerate(trainGenerator):
-            import pdb
-            pdb.set_trace()
+            startTime = time.time()
             img, label = batchData
             img = img.cuda()
             op = model(img)
-            print("HOOK")
-
+            # print("HOOK")
+            loss = mse_loss(op, label['original'].cuda())
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            endTime = time.time()
+            print("Batch Time: {}".format(endTime - startTime))
+            # lr_ = base_lr * (1.0 - iter_num / max_iterations) ** 0.9
+            # for param_group in optimizer.param_groups:
+            #     param_group['lr'] = lr_
+        eEnd = time.time()
+        print("Epoch Time: {}".format(eEnd - eStart))
 
 
