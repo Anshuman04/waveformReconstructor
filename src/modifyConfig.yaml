@@ -10,7 +10,7 @@ MODEL:
     DECODER_DEPTHS: [ 2, 2, 2, 1]
     NUM_HEADS: [ 3, 6, 12, 24 ]
     WINDOW_SIZE: 8
-    PATCH_SIZE: 16
+    PATCH_SIZE: 15
     IN_CHANS: 1
 
 DATA:
